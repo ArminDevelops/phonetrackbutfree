@@ -92,3 +92,8 @@ export function makeTestApp() {
     },
   };
 }
+
+/** Response body with the few HTML entities hono/jsx emits decoded, for text assertions. */
+export async function pageText(res: Response): Promise<string> {
+  return (await res.text()).replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}

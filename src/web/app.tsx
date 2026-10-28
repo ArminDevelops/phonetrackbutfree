@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 import { Hono } from "hono";
 import type { WebDeps } from "./deps.js";
 import { HealthPill } from "./layout.js";
+import { registerAlerts } from "./pages/alerts.js";
+import { registerNewAlert } from "./pages/new-alert.js";
 import { registerSettings } from "./pages/settings.js";
 
 export type { WebDeps } from "./deps.js";
@@ -29,6 +31,8 @@ export function createApp(deps: WebDeps): Hono {
   app.get("/partials/health", (c) => c.html(<HealthPill status={deps.checker.status()} now={deps.clock.now()} />));
   app.get("/api/status", (c) => c.json(deps.checker.status()));
 
+  registerAlerts(app, deps);
+  registerNewAlert(app, deps);
   registerSettings(app, deps);
   return app;
 }
