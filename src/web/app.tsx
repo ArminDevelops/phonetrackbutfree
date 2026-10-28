@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { Hono } from "hono";
 import type { WebDeps } from "./deps.js";
+import { localOnly } from "./guard.js";
 import { HealthPill } from "./layout.js";
 import { registerAlerts } from "./pages/alerts.js";
 import { registerNewAlert } from "./pages/new-alert.js";
@@ -23,6 +24,7 @@ function loadAssets() {
 export function createApp(deps: WebDeps): Hono {
   const app = new Hono();
   const assets = loadAssets();
+  app.use("*", localOnly(deps.config.host));
 
   app.get("/static/styles.css", (c) =>
     c.body(assets.css, 200, { "content-type": "text/css; charset=utf-8", "cache-control": "no-cache" }),

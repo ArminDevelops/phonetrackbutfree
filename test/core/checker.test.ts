@@ -158,6 +158,31 @@ describe("failures", () => {
     expect(gate.isOpen()).toBe(true);
   });
 
+  test("an exception during a request counts as an error with backoff", async () => {
+    const s = setup();
+    s.apple.onPickup(() => {
+      throw new Error("boom");
+    });
+    const { checker, gate } = s.make();
+    expect((await checker.runCycle()).outcome).toEqual({ kind: "error", message: "boom" });
+    expect(gate.isOpen()).toBe(false);
+    expect(checker.status().state).toBe("error");
+  });
+
+  test("an unexpected crash inside the loop still backs off and counts as failing", async () => {
+    const s = setup();
+    s.apple.onPickup((parts) => stock(parts));
+    s.repo.upsertStores = () => {
+      throw new Error("database is locked");
+    };
+    const { checker, gate } = s.make();
+    checker.start();
+    await vi.waitFor(() => expect(gate.isOpen()).toBe(false));
+    checker.stop();
+    expect(checker.status()).toMatchObject({ state: "error", failingSince: s.clock.now() });
+    expect(gate.lastFailure?.message).toContain("database is locked");
+  });
+
   test("no requests while backing off", async () => {
     const s = setup();
     const { checker, gate } = s.make();
@@ -184,6 +209,21 @@ describe("health pushes", () => {
     expect(s.sent.map((m) => m.title)).toEqual(["Stock checker can't reach Apple", "Stock checker recovered"]);
   });
 
+  test("a health push that ntfy rejects is retried on the next cycle", async () => {
+    const s = setup();
+    s.repo.setSetting("last_cycle_at", String(s.clock.now() - 6 * HOUR));
+    s.apple.onPickup((parts) => stock(parts));
+    s.failNextPushes(1);
+    const { checker } = s.make();
+    await checker.runCycle();
+    expect(s.sent).toEqual([]);
+    s.clock.advance(30_000);
+    await checker.runCycle();
+    s.clock.advance(30_000);
+    await checker.runCycle();
+    expect(s.sent.map((m) => m.title)).toEqual(["Stock checker resumed"]);
+  });
+
   test("a long pause gives one resumed push and no warning", async () => {
     const s = setup();
     s.repo.setSetting("last_cycle_at", String(s.clock.now() - 6 * HOUR));
@@ -191,6 +231,24 @@ describe("health pushes", () => {
     await s.make().checker.runCycle();
     expect(s.sent.map((m) => m.title)).toEqual(["Stock checker resumed"]);
     expect(s.sent[0]!.message).toContain("6 h");
+  });
+});
+
+describe("sleep in the middle of a cycle", () => {
+  test("a pause during a request is reported and not counted as failure time", async () => {
+    const s = setup();
+    let sleepNow = false;
+    s.apple.onPickup(() => {
+      if (sleepNow) s.clock.advance(6 * HOUR);
+      return { kind: "error", message: "timeout after 15000 ms" };
+    });
+    const { checker, gate } = s.make();
+    await checker.runCycle();
+    s.clock.t = gate.backoffUntil!;
+    sleepNow = true;
+    await checker.runCycle();
+    expect(s.sent.map((m) => m.title)).toEqual(["Stock checker resumed"]);
+    expect(checker.status().failingSince).toBe(s.clock.now());
   });
 });
 

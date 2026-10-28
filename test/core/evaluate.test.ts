@@ -83,14 +83,23 @@ describe("evaluateAlerts", () => {
     expect(evaluateAlerts(repo, [obs("A", "R159", "available")], T0 + 20 * MIN, COOLDOWN)).toHaveLength(1);
   });
 
-  test("flapping within the cooldown is suppressed", () => {
+  test("flapping within the cooldown waits, then pushes if the stock is still there", () => {
     const { repo, id } = withAlert();
     markNotified(repo, evaluateAlerts(repo, [obs("A", "R159", "available")], T0, COOLDOWN)[0]!, T0);
     evaluateAlerts(repo, [obs("A", "R159", "unavailable")], T0 + MIN, COOLDOWN);
     expect(evaluateAlerts(repo, [obs("A", "R159", "available")], T0 + 3 * MIN, COOLDOWN)).toEqual([]);
-    expect(repo.getHit(id, "A", "R159")).toMatchObject({ active: true, lastNotifiedAt: T0 });
-    evaluateAlerts(repo, [obs("A", "R159", "unavailable")], T0 + 20 * MIN, COOLDOWN);
-    expect(evaluateAlerts(repo, [obs("A", "R159", "available")], T0 + 21 * MIN, COOLDOWN)).toHaveLength(1);
+    expect(repo.getHit(id, "A", "R159")).toMatchObject({ active: false, lastNotifiedAt: T0 });
+    expect(evaluateAlerts(repo, [obs("A", "R159", "available")], T0 + 9 * MIN, COOLDOWN)).toEqual([]);
+    expect(evaluateAlerts(repo, [obs("A", "R159", "available")], T0 + 11 * MIN, COOLDOWN)).toHaveLength(1);
+  });
+
+  test("a flap that sells out again inside the cooldown never pushes twice", () => {
+    const { repo } = withAlert();
+    markNotified(repo, evaluateAlerts(repo, [obs("A", "R159", "available")], T0, COOLDOWN)[0]!, T0);
+    evaluateAlerts(repo, [obs("A", "R159", "unavailable")], T0 + MIN, COOLDOWN);
+    expect(evaluateAlerts(repo, [obs("A", "R159", "available")], T0 + 2 * MIN, COOLDOWN)).toEqual([]);
+    expect(evaluateAlerts(repo, [obs("A", "R159", "unavailable")], T0 + 3 * MIN, COOLDOWN)).toEqual([]);
+    expect(evaluateAlerts(repo, [obs("A", "R159", "unavailable")], T0 + 12 * MIN, COOLDOWN)).toEqual([]);
   });
 
   test("several pairs of one alert become one match", () => {

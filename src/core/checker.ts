@@ -49,6 +49,7 @@ export interface CheckerStatus {
 const CATALOG_MAX_AGE_MS = 24 * 3_600_000;
 const HEARTBEAT_EVERY_MS = 5 * 60_000;
 const LATE_WAKEUP_MS = 60_000;
+const MAX_PENDING_HEALTH = 10;
 
 /** Runs the polling loop: plan batches, ask Apple, record state, push alerts and health. */
 export class Checker {
@@ -61,6 +62,8 @@ export class Checker {
   private timer: NodeJS.Timeout | null = null;
   private wake: (() => void) | null = null;
   private nextRunAt: number | null = null;
+  /** Health pushes ntfy rejected (e.g. Wi-Fi still reconnecting after wake); retried every cycle. */
+  private pendingHealth: HealthEvent[] = [];
 
   constructor(private readonly deps: CheckerDeps) {
     this.random = deps.random ?? Math.random;
@@ -72,6 +75,7 @@ export class Checker {
     const startedAt = clock.now();
     const report: CycleReport = { outcome: { kind: "skipped" }, requests: 0, observations: 0, changes: [], pushes: 0 };
 
+    await this.retryPendingHealth();
     const pause = health.checkPause(startedAt);
     if (pause) await this.pushHealth(pause);
 
@@ -88,7 +92,12 @@ export class Checker {
       if (i > 0) await this.sleep(2000 + this.random() * 2000);
       gate.countRequest();
       report.requests++;
-      const result = await apple.pickup(batch, config.appleLocation);
+      let result: Awaited<ReturnType<AppleClient["pickup"]>>;
+      try {
+        result = await apple.pickup(batch, config.appleLocation);
+      } catch (error) {
+        result = { kind: "error", message: error instanceof Error ? error.message : String(error) };
+      }
 
       if (result.kind === "blocked") {
         gate.reportFailure("blocked", `HTTP ${result.httpStatus}`);
@@ -130,6 +139,10 @@ export class Checker {
     }
 
     this.ranCycle = true;
+    // The Mac may have slept while a request was in flight: report that pause and
+    // restart the failure streak before this cycle's outcome is counted.
+    const pausedDuringCycle = health.checkPause(clock.now());
+    if (pausedDuringCycle) await this.pushHealth(pausedDuringCycle);
     const healthEvent = health.recordCycle(report.outcome, clock.now());
     if (healthEvent) await this.pushHealth(healthEvent);
     if (report.outcome.kind === "success") this.heartbeat();
@@ -201,7 +214,7 @@ export class Checker {
       try {
         await this.runCycle();
       } catch (error) {
-        log("cycle.crashed", { error });
+        this.recordCrash(error);
       }
       if (!this.running) break;
 
@@ -216,6 +229,16 @@ export class Checker {
       const late = clock.now() - plannedAt;
       if (this.running && late > LATE_WAKEUP_MS) log("loop.gap", { lateMs: late });
     }
+  }
+
+  /** An unexpected exception must still back off and count towards health, never fail silently. */
+  private recordCrash(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    log("cycle.crashed", { error: message, stack: error instanceof Error ? error.stack : undefined });
+    this.ranCycle = true;
+    this.deps.gate.reportFailure("error", `internal error: ${message}`);
+    const event = this.deps.health.recordCycle({ kind: "error", message: `internal error: ${message}` }, this.deps.clock.now());
+    if (event) void this.pushHealth(event).catch((e) => log("push.health_crashed", { error: e }));
   }
 
   private lookup(): Lookup {
@@ -251,6 +274,12 @@ export class Checker {
     return pushed;
   }
 
+  private async retryPendingHealth(): Promise<void> {
+    const pending = this.pendingHealth;
+    this.pendingHealth = [];
+    for (const event of pending) await this.pushHealth(event);
+  }
+
   private async pushHealth(event: HealthEvent): Promise<void> {
     const { repo, notifier, clock, topic } = this.deps;
     const message = buildHealthMessage(topic, event);
@@ -264,6 +293,7 @@ export class Checker {
       error: result.ok ? null : result.error,
     });
     log("push.health", { kind: event.kind, ok: result.ok, error: result.ok ? undefined : result.error });
+    if (!result.ok && this.pendingHealth.length < MAX_PENDING_HEALTH) this.pendingHealth.push(event);
   }
 
   private heartbeat(): void {

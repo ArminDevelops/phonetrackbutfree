@@ -108,6 +108,26 @@ describe("refresh", () => {
     expect(apple.gets).toEqual(["buy-iphone"]);
   });
 
+  test("concurrent refreshes share one run", async () => {
+    const { service, apple } = setup();
+    const [a, b] = await Promise.all([service.refresh(), service.refresh()]);
+    expect(apple.gets).toHaveLength(7);
+    expect(b).toEqual(a);
+  });
+
+  test("a block elsewhere stops the refresh before its next request", async () => {
+    const { service, apple, gate } = setup();
+    const get = apple.client.get;
+    apple.client.get = async (path) => {
+      const response = await get(path);
+      if (path.endsWith("iphoneair")) gate.reportFailure("blocked", "HTTP 541");
+      return response;
+    };
+    await service.refresh();
+    expect(apple.gets.at(-1)).toBe("product-locator-meta?family=iphoneair");
+    expect(apple.gets).toHaveLength(4);
+  });
+
   test("no requests while the gate is closed", async () => {
     const { service, gate, apple } = setup();
     gate.reportFailure("blocked", "HTTP 541");

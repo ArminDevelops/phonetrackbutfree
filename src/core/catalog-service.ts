@@ -26,6 +26,7 @@ export class CatalogService {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly spacingMs: number;
   private lastAttemptAt: number | null = null;
+  private inFlight: Promise<CatalogRefreshResult> | null = null;
 
   constructor(
     private readonly deps: {
@@ -41,7 +42,15 @@ export class CatalogService {
     this.spacingMs = deps.spacingMs ?? 2500;
   }
 
-  async refresh(): Promise<CatalogRefreshResult> {
+  /** One refresh at a time: a second caller (button, daily timer) joins the running one. */
+  refresh(): Promise<CatalogRefreshResult> {
+    this.inFlight ??= this.runRefresh().finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
+
+  private async runRefresh(): Promise<CatalogRefreshResult> {
     const { apple, repo, gate, clock } = this.deps;
     if (!gate.isOpen()) return { ok: false, families: [] };
 
@@ -66,6 +75,12 @@ export class CatalogService {
     for (const [sortOrder, slug] of slugs.entries()) {
       const family = familyFromSlug(slug);
       await this.sleep(this.spacingMs);
+      if (!gate.isOpen()) {
+        // The checker (or another call) got blocked meanwhile: send nothing more during the backoff.
+        log("catalog.gate_closed", { family });
+        interrupted = true;
+        break;
+      }
       gate.countRequest();
       const response = await apple.get(`product-locator-meta?family=${family}`);
       if (response.kind === "blocked") {

@@ -49,20 +49,27 @@ export function parsePickupJson(text: string): BatchResult {
 
   const stores: StoreInfo[] = [];
   const observations: Observation[] = [];
-  for (const raw of rawStores) {
-    if (!raw.storeNumber) continue;
-    stores.push({ storeNumber: raw.storeNumber, name: raw.storeName ?? raw.storeNumber, city: raw.city ?? "" });
-    for (const [partNumber, part] of Object.entries(raw.partsAvailability ?? {})) {
-      const pickupDisplay = part.pickupDisplay ?? "";
-      observations.push({
-        partNumber,
-        storeNumber: raw.storeNumber,
-        status: pickupDisplay === "available" ? "available" : "unavailable",
-        pickupDisplay,
-        quote: cleanText(part.pickupSearchQuote ?? ""),
-        productTitle: cleanText(part.messageTypes?.regular?.storePickupProductTitle ?? ""),
-      });
+  try {
+    for (const raw of rawStores) {
+      if (!raw.storeNumber) continue;
+      stores.push({ storeNumber: raw.storeNumber, name: raw.storeName ?? raw.storeNumber, city: raw.city ?? "" });
+      for (const [partNumber, part] of Object.entries(raw.partsAvailability ?? {})) {
+        const pickupDisplay = part.pickupDisplay ?? "";
+        observations.push({
+          partNumber,
+          storeNumber: raw.storeNumber,
+          status: pickupDisplay === "available" ? "available" : "unavailable",
+          pickupDisplay,
+          quote: cleanText(part.pickupSearchQuote ?? ""),
+          productTitle: cleanText(part.messageTypes?.regular?.storePickupProductTitle ?? ""),
+        });
+      }
     }
+  } catch (error) {
+    // Apple changed the response shape: report it instead of crashing the cycle.
+    return { kind: "error", message: `unexpected response shape: ${error instanceof Error ? error.message : String(error)}` };
   }
+  // Stores but no part data means Apple changed the format; never treat that as a healthy answer.
+  if (observations.length === 0) return { kind: "empty", message: "stores without part availability" };
   return { kind: "success", stores, observations };
 }

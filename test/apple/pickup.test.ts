@@ -73,6 +73,19 @@ describe("parsePickupJson", () => {
     });
   });
 
+  test("malformed store entries are an error, not a crash", () => {
+    expect(parsePickupJson('{"body":{"stores":[null]}}')).toMatchObject({ kind: "error" });
+    expect(parsePickupJson('{"body":{"stores":[{"storeNumber":"R159","partsAvailability":{"MK2D4QL/A":null}}]}}')).toMatchObject({
+      kind: "error",
+    });
+  });
+
+  test("stores without any part data count as empty, not success", () => {
+    const json = fixtureJson("pickup-message-single-store.json");
+    delete json.body.stores[0].partsAvailability;
+    expect(parsePickupJson(JSON.stringify(json)).kind).toBe("empty");
+  });
+
   test("an HTML page is an error, not a result", () => {
     expect(parsePickupJson(fixture("blocked-541.html"))).toMatchObject({ kind: "error" });
   });

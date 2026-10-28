@@ -45,8 +45,9 @@ export function applyObservations(repo: Repo, observations: Observation[], now: 
 
 /**
  * Decides which (alert, part, store) pairs deserve a push. Selling out re-arms a
- * pair; coming back within `cooldownMs` of the last push is treated as a flap and
- * silently re-armed as active instead.
+ * pair. Stock that comes back within `cooldownMs` of the last push waits for the
+ * cooldown to pass and is pushed then if it is still there, so a flap costs at
+ * most one push per cooldown but a real restock is never swallowed.
  */
 export function evaluateAlerts(repo: Repo, observations: Observation[], now: number, cooldownMs: number): AlertMatch[] {
   const matches: AlertMatch[] = [];
@@ -63,10 +64,7 @@ export function evaluateAlerts(repo: Repo, observations: Observation[], now: num
         continue;
       }
       if (hit?.active) continue;
-      if (hit?.lastNotifiedAt != null && now - hit.lastNotifiedAt < cooldownMs) {
-        repo.upsertHit({ ...hit, active: true });
-        continue;
-      }
+      if (hit?.lastNotifiedAt != null && now - hit.lastNotifiedAt < cooldownMs) continue;
       due.push(o);
     }
     if (due.length > 0) matches.push({ alert, observations: due });
