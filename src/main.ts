@@ -21,7 +21,10 @@ const config = loadConfig(process.env);
 const db = openDb(join(config.dataDir, "stockchecker.db"));
 const repo = new Repo(db);
 const clock = systemClock;
-const gate = new AppleGate(clock);
+const gate = new AppleGate(clock, Math.random, {
+  load: () => repo.getSetting("apple_gate"),
+  save: (state) => repo.setSetting("apple_gate", state),
+});
 const apple = createAppleClient();
 const catalog = new CatalogService({ apple, repo, gate, clock });
 const health = new HealthMonitor({

@@ -198,7 +198,7 @@ describe("health pushes", () => {
     let blocked = true;
     s.apple.onPickup((parts) => (blocked ? { kind: "blocked", httpStatus: 541 } : stock(parts)));
     const { checker, gate } = s.make();
-    // Blocked cycles at 0, 1.5, 4.5, 9.5, 19.5 and 29.5 min (each waits out its backoff).
+    // Blocked cycles at 0, 1.5, 4.5, 9.5, 19.5 and 34.5 min (each waits out its backoff).
     for (let i = 0; i < 6; i++) {
       await checker.runCycle();
       s.clock.t = gate.backoffUntil!;
@@ -257,9 +257,10 @@ describe("scheduling", () => {
     const s = setup();
     const watched = (n: number) => Array.from({ length: n }, (_, i) => `W${String(i).padStart(4, "0")}QL/A`);
     s.repo.createAlert({ name: null, partNumbers: watched(3), storeNumbers: ALL_STORES }, s.clock.now());
-    expect(s.make().checker.nextDelayMs()).toBe(30_000);
+    expect(s.make().checker.nextDelayMs()).toBe(90_000);
+    // 48 watched parts → 3 requests per cycle; 45 requests/hour → one cycle every 240 s.
     s.repo.createAlert({ name: null, partNumbers: watched(45), storeNumbers: ALL_STORES }, s.clock.now());
-    expect(s.make().checker.nextDelayMs()).toBe(72_000);
+    expect(s.make().checker.nextDelayMs()).toBe(240_000);
   });
 
   test("spare slots sweep the whole catalog", async () => {

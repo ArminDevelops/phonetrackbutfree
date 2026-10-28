@@ -71,8 +71,9 @@ export function loadConfig(env: Env): Config {
     port: positiveInt(env, "PORT", 4321),
     host: text(env, "HOST") ?? "127.0.0.1",
     dataDir: text(env, "DATA_DIR") ?? "./data",
-    pollIntervalSeconds: positiveInt(env, "POLL_INTERVAL_SECONDS", 30),
-    maxRequestsPerHour: positiveInt(env, "MAX_REQUESTS_PER_HOUR", 150),
+    // Measured 2026-10-28: polling every ~30 s got two different IPs blocked within ~30 minutes.
+    pollIntervalSeconds: positiveInt(env, "POLL_INTERVAL_SECONDS", 90),
+    maxRequestsPerHour: positiveInt(env, "MAX_REQUESTS_PER_HOUR", 45),
     appleLocation: matching(env, "APPLE_LOCATION", SWISS_POSTCODE, "8001")!,
     ntfyServer: (text(env, "NTFY_SERVER") ?? "https://ntfy.sh").replace(/\/+$/, ""),
     ntfyTopic: matching(env, "NTFY_TOPIC", TOPIC_PATTERN, null),

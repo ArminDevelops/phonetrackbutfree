@@ -130,6 +130,15 @@ Not needed for v1, recorded in case Apple also shields `retail/pickup-message`.
 - Public repos using the same contingency: drewster99/mac-availability-tracker
   (`shield.py`), westonfw/iphone-hunter.
 
+## Rate limiting — our own measurement (2026-10-28)
+
+- Home IP (Swiss residential): polling `retail/pickup-message` every ~30 s (±20 %), one request per
+  cycle, got HTTP 541 after ~30 min (it had also seen heavy research traffic earlier that day).
+- cloud server IP (clean, no prior traffic except 8 test requests): same polling → 541 after ~28 min.
+- Blocks lasted at least 15 minutes, and probes during the block (container restarts) likely extended it.
+- Conclusion: ~2 requests/minute sustained is too much; the "≤150/h is safe" community figure did not hold.
+  Default lowered to one request every ~90 s (≤45/h) and backoff now persists across restarts.
+
 ## Rate limiting (community reports, unverified)
 
 - ENCHIGO/apple-pickup-watcher: ~30 back-to-back requests → 541 for 10–15 min, per IP.

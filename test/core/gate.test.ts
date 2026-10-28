@@ -18,7 +18,9 @@ describe("AppleGate", () => {
   test("blocked backoff steps", () => {
     const clock = new FakeClock();
     const gate = new AppleGate(clock, () => 0.5);
-    expect(delays(gate, clock, ["blocked", "blocked", "blocked", "blocked", "blocked"])).toEqual([90e3, 180e3, 300e3, 600e3, 600e3]);
+    expect(delays(gate, clock, ["blocked", "blocked", "blocked", "blocked", "blocked", "blocked"])).toEqual([
+      90e3, 180e3, 300e3, 600e3, 900e3, 900e3,
+    ]);
   });
 
   test("error backoff steps", () => {
@@ -49,6 +51,31 @@ describe("AppleGate", () => {
     expect(gate.backoffUntil).toBeNull();
     expect(gate.consecutiveFailures).toBe(0);
     expect(gate.lastFailure?.message).toBe("HTTP 541");
+  });
+
+  test("backoff survives a restart", () => {
+    const clock = new FakeClock();
+    let saved: string | undefined;
+    const store = { load: () => saved, save: (state: string) => void (saved = state) };
+    const gate = new AppleGate(clock, () => 0.5, store);
+    gate.reportFailure("blocked", "HTTP 541");
+    gate.reportFailure("blocked", "HTTP 541");
+    const restarted = new AppleGate(clock, () => 0.5, store);
+    expect(restarted.isOpen()).toBe(false);
+    expect(restarted.backoffUntil).toBe(clock.now() + 180e3);
+    expect(restarted.consecutiveFailures).toBe(2);
+    expect(restarted.lastFailure).toEqual({ kind: "blocked", message: "HTTP 541", at: clock.now() });
+    restarted.reportFailure("blocked", "HTTP 541");
+    expect(restarted.backoffUntil! - clock.now()).toBe(300e3);
+    restarted.reportSuccess();
+    const again = new AppleGate(clock, () => 0.5, store);
+    expect(again.isOpen()).toBe(true);
+    expect(again.consecutiveFailures).toBe(0);
+  });
+
+  test("a corrupt saved state is ignored", () => {
+    const gate = new AppleGate(new FakeClock(), () => 0.5, { load: () => "{not json", save: () => {} });
+    expect(gate.isOpen()).toBe(true);
   });
 
   test("counts requests in the last hour", () => {

@@ -134,8 +134,8 @@ Copy `.env.example` to `.env` and change what you need, then `npm run service:re
 |---|---|---|
 | `PORT` / `HOST` | `4321` / `127.0.0.1` | Dashboard address. Keep `127.0.0.1` unless you add basic auth. (Docker sets `0.0.0.0` inside the container and publishes only on the host's `127.0.0.1`.) |
 | `DATA_DIR` | `./data` | SQLite database location. |
-| `POLL_INTERVAL_SECONDS` | `30` | Base interval, ±20 % jitter. |
-| `MAX_REQUESTS_PER_HOUR` | `150` | Hard budget for Apple requests; the interval stretches to respect it. |
+| `POLL_INTERVAL_SECONDS` | `90` | Base interval, ±20 % jitter. Faster than ~60 s gets blocked (see below). |
+| `MAX_REQUESTS_PER_HOUR` | `45` | Polling budget; the interval stretches to respect it when you watch many parts. |
 | `APPLE_LOCATION` | `8001` | Postcode for the store search; 8001 returns all four stores. |
 | `NTFY_SERVER` | `https://ntfy.sh` | |
 | `NTFY_TOPIC` | *(generated)* | Set to use your own topic. |
@@ -168,11 +168,13 @@ The checker can only check while the Mac is awake.
   four Swiss stores in one request. Only `available` counts.
 - **Batching:** the parts you watch go first in each request; spare slots are filled round-robin with the
   rest of the catalog, so the live grid refreshes without extra requests. With a few alerts that's one
-  request every ~30 s.
+  request every ~90 s.
 - **Catalog:** discovered daily from `/ch-de/shop/buy-iphone` (model pages) and
   `/ch-de/shop/product-locator-meta?family=…` (part numbers, titles, prices, buy links).
-- **Being polite:** Apple rate-limits per IP and answers **HTTP 541** when it does. The checker then stops
-  completely and backs off 90 s → 3 min → 5 min → 10 min. Network and other errors back off
+- **Being polite:** Apple rate-limits per IP and answers **HTTP 541** when it does. Polling every ~30 s got
+  both a home IP and a cloud server blocked within ~30 minutes (2026-10-28), hence the 90 s default. When
+  blocked, the checker stops completely and backs off 1.5 → 3 → 5 → 10 → 15 min; the backoff survives
+  restarts, so redeploying never probes Apple mid-block. Network and other errors back off
   30 s → 1 → 2 → 5 min. A blocked or failed check never counts as "sold out", and never triggers a push.
 - **Pushes:** one push per alert per check, listing every newly available config and store. Tapping it
   opens Apple's buy page for that configuration. Stock that stays available never pushes twice, and
@@ -184,7 +186,7 @@ The checker can only check while the Mac is awake.
 ## Troubleshooting
 
 - **"Blocked by Apple" in the header:** expected now and then. It backs off and recovers on its own.
-  If it happens a lot, raise `POLL_INTERVAL_SECONDS` or lower `MAX_REQUESTS_PER_HOUR`.
+  If it happens a lot, raise `POLL_INTERVAL_SECONDS` (e.g. 120–180) or lower `MAX_REQUESTS_PER_HOUR`.
 - **Nothing in Live stock:** the catalog loads ~20 s after start. **Settings → Refresh catalog now**
   forces it.
 - **No pushes:** check **Settings → Recent notifications** for errors, and make sure the phone is subscribed
