@@ -19,6 +19,8 @@ export interface NtfyMessage {
   click?: string;
   actions?: NtfyAction[];
   attach?: string;
+  /** Lets the ntfy apps show the extension-less Apple image URL inline as a PNG. */
+  filename?: string;
 }
 
 export interface Lookup {
@@ -67,7 +69,7 @@ export function buildRestockMessage(topic: string, match: AlertMatch, lookup: Lo
       tags: ["iphone"],
       click: first.link,
       actions: [{ action: "view", label: "Buy now", url: first.link }],
-      ...(first.item?.imageKey ? { attach: imageUrl(first.item.imageKey) } : {}),
+      ...(first.item?.imageKey ? { attach: imageUrl(first.item.imageKey), filename: `${first.item.imageKey}.png` } : {}),
     };
   }
 

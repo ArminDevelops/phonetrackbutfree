@@ -680,9 +680,15 @@ code {
 
 .board {
   width: 100%;
+  min-width: 640px;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0 4px;
   font-size: 14px;
+}
+
+.board th:first-child {
+  width: 34%;
 }
 
 .board th {
@@ -708,6 +714,8 @@ code {
 
 .board .config {
   padding: 9px 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   background: var(--card);
   border: 1px solid var(--rule);
   border-right: 0;
@@ -722,9 +730,11 @@ code {
   margin-left: 8px;
 }
 
+.board td.cell {
+  padding: 9px 12px;
+}
+
 .cell {
-  min-width: 112px;
-  padding: 9px 10px;
   background: var(--off-bg);
   border: 1px solid var(--rule);
   border-left: 0;
@@ -800,6 +810,11 @@ code {
 
 .summary strong {
   color: var(--go);
+}
+
+.alerts + .legend,
+.panel + .legend {
+  margin-top: 16px;
 }
 
 .legend {
@@ -937,9 +952,6 @@ code {
   .kv__row {
     grid-template-columns: 1fr;
     gap: 0;
-  }
-  .cell {
-    min-width: 88px;
   }
 }
 

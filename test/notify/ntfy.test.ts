@@ -47,6 +47,7 @@ describe("buildRestockMessage", () => {
       click: link,
       actions: [{ action: "view", label: "Buy now", url: link }],
       attach: imageUrl("iphone-duo-finish-select-star-white-202609"),
+      filename: "iphone-duo-finish-select-star-white-202609.png",
     });
   });
 
