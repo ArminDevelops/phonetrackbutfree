@@ -6,3 +6,4 @@ data/
 .DS_Store
 .playwright-mcp/
 coverage/
+.superpowers/
