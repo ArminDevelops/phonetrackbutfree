@@ -1,0 +1,36 @@
+{
+  "name": "apple-stock-ch",
+  "version": "0.1.0",
+  "description": "Private Apple Store pickup stock checker for Switzerland with ntfy pushes",
+  "scripts": {
+    "test": "vitest run",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "dev": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx watch src/main.ts",
+    "start": "node --disable-warning=ExperimentalWarning dist/main.js",
+    "smoke": "NODE_OPTIONS=--disable-warning=ExperimentalWarning tsx scripts/smoke.ts",
+    "service:install": "bash scripts/service.sh install",
+    "service:uninstall": "bash scripts/service.sh uninstall",
+    "service:restart": "bash scripts/service.sh restart",
+    "service:logs": "bash scripts/service.sh logs",
+    "service:status": "bash scripts/service.sh status"
+  },
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.14",
+    "htmx.org": "^2.0.11",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/qrcode": "^1.5.6",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}
