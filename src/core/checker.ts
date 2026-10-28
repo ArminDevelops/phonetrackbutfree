@@ -187,8 +187,8 @@ export class Checker {
     const snapshot = health.snapshot();
     const failure = gate.lastFailure;
     let state: CheckerStatus["state"] = "ok";
-    if (!this.ranCycle) state = "starting";
-    else if (gate.consecutiveFailures > 0 && failure) state = failure.kind;
+    if (gate.consecutiveFailures > 0 && failure) state = failure.kind;
+    else if (!this.ranCycle) state = "starting";
     return {
       state,
       lastSuccessAt: snapshot.lastSuccessAt,

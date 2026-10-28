@@ -301,6 +301,13 @@ describe("scheduling", () => {
     expect(checker.status()).toMatchObject({ state: "ok", lastSuccessAt: s.clock.now(), requestsLastHour: 1, watchedParts: 0 });
   });
 
+  test("a block remembered from before a restart shows as blocked, not starting", () => {
+    const s = setup();
+    const { checker, gate } = s.make();
+    gate.reportFailure("blocked", "HTTP 541");
+    expect(checker.status().state).toBe("blocked");
+  });
+
   test("start runs a cycle and stop ends the loop", async () => {
     const s = setup();
     s.apple.onPickup((parts) => stock(parts));
