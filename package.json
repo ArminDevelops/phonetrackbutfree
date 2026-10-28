@@ -13,7 +13,8 @@
     "service:uninstall": "bash scripts/service.sh uninstall",
     "service:restart": "bash scripts/service.sh restart",
     "service:logs": "bash scripts/service.sh logs",
-    "service:status": "bash scripts/service.sh status"
+    "service:status": "bash scripts/service.sh status",
+    "deploy": "bash scripts/deploy.sh"
   },
   "type": "module",
   "private": true,

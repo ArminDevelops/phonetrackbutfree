@@ -24,10 +24,10 @@ export function okStatus(now: number, overrides: Partial<CheckerStatus> = {}): C
   };
 }
 
-export function makeTestApp() {
+export function makeTestApp(env: Record<string, string> = {}) {
   const clock = new FakeClock();
   const repo = new Repo(openDb(":memory:"));
-  const config = loadConfig({});
+  const config = loadConfig(env);
   let status = okStatus(clock.now());
   const sent: NtfyMessage[] = [];
   let sendResult: SendResult = { ok: true };

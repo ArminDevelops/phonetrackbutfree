@@ -34,3 +34,46 @@ describe("cross-site protection", () => {
     expect((await t.app.request("http://127.0.0.1:4321/settings")).status).toBe(200);
   });
 });
+
+describe("host allowlist", () => {
+  test("an extra allowed host (a subdomain behind nginx) is accepted", async () => {
+    const t = makeTestApp({ ALLOWED_HOSTS: "stock.example.com" });
+    expect((await t.app.request("https://stock.example.com/settings")).status).toBe(200);
+    expect((await t.app.request("https://other.example.com/settings")).status).toBe(403);
+  });
+
+  test("a form POST from the allowed subdomain works", async () => {
+    const t = makeTestApp({ ALLOWED_HOSTS: "stock.example.com" });
+    const id = t.repo.createAlert({ name: null, partNumbers: ["A"], storeNumbers: ["R159"] }, t.clock.now());
+    const res = await t.app.request(`https://stock.example.com/alerts/${id}/delete`, {
+      method: "POST",
+      headers: { origin: "https://stock.example.com" },
+    });
+    expect(res.status).toBe(303);
+  });
+});
+
+describe("basic auth", () => {
+  const auth = (user: string, password: string) => ({ authorization: `Basic ${btoa(`${user}:${password}`)}` });
+
+  test("is off unless configured", async () => {
+    expect((await makeTestApp().app.request("/")).status).toBe(200);
+  });
+
+  test("protects every page when configured", async () => {
+    const t = makeTestApp({ DASHBOARD_USER: "admin", DASHBOARD_PASSWORD: "s3cret" });
+    const denied = await t.app.request("/settings");
+    expect(denied.status).toBe(401);
+    expect(denied.headers.get("www-authenticate")).toMatch(/^Basic/);
+    expect((await t.app.request("/api/status")).status).toBe(401);
+    expect((await t.app.request("/settings", { headers: auth("admin", "wrong") })).status).toBe(401);
+    expect((await t.app.request("/settings", { headers: auth("admin", "s3cret") })).status).toBe(200);
+  });
+
+  test("the health check stays open and reveals nothing", async () => {
+    const t = makeTestApp({ DASHBOARD_USER: "admin", DASHBOARD_PASSWORD: "s3cret" });
+    const res = await t.app.request("/healthz");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
+  });
+});

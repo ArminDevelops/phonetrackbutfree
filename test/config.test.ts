@@ -16,7 +16,28 @@ test("defaults", () => {
     healthAlertAfterMinutes: 15,
     pauseAlertAfterMinutes: 30,
     heartbeatUrl: null,
+    allowedHosts: ["127.0.0.1", "localhost", "::1"],
+    dashboardUser: null,
+    dashboardPassword: null,
   });
+});
+
+test("extra allowed hosts extend the loopback names", () => {
+  expect(loadConfig({ ALLOWED_HOSTS: " Stock.Example.com, [::1] ,localhost" }).allowedHosts).toEqual([
+    "127.0.0.1",
+    "localhost",
+    "::1",
+    "stock.example.com",
+  ]);
+});
+
+test("dashboard credentials come as a pair", () => {
+  expect(loadConfig({ DASHBOARD_USER: "admin", DASHBOARD_PASSWORD: "s3cret" })).toMatchObject({
+    dashboardUser: "admin",
+    dashboardPassword: "s3cret",
+  });
+  expect(() => loadConfig({ DASHBOARD_USER: "admin" })).toThrow("DASHBOARD_PASSWORD");
+  expect(() => loadConfig({ DASHBOARD_PASSWORD: "s3cret" })).toThrow("DASHBOARD_USER");
 });
 
 test("overrides", () => {

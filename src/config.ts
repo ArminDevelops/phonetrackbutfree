@@ -12,12 +12,18 @@ export interface Config {
   healthAlertAfterMinutes: number;
   pauseAlertAfterMinutes: number;
   heartbeatUrl: string | null;
+  /** Host names the dashboard answers to (blocks DNS rebinding). Loopback names are always included. */
+  allowedHosts: string[];
+  /** Optional basic auth for the dashboard, e.g. when it is exposed through a subdomain. */
+  dashboardUser: string | null;
+  dashboardPassword: string | null;
 }
 
 type Env = Record<string, string | undefined>;
 
 const TOPIC_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const SWISS_POSTCODE = /^[1-9]\d{3}$/;
+const LOOPBACK_HOSTS = ["127.0.0.1", "localhost", "::1"];
 
 function text(env: Env, key: string): string | null {
   const value = env[key]?.trim();
@@ -40,7 +46,19 @@ function matching(env: Env, key: string, pattern: RegExp, fallback: string | nul
   return raw;
 }
 
+function hostList(env: Env, key: string): string[] {
+  const extra = (text(env, key) ?? "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase().replace(/^\[(.*)\]$/, "$1"))
+    .filter(Boolean);
+  return [...new Set([...LOOPBACK_HOSTS, ...extra])];
+}
+
 export function loadConfig(env: Env): Config {
+  const dashboardUser = text(env, "DASHBOARD_USER");
+  const dashboardPassword = text(env, "DASHBOARD_PASSWORD");
+  if (dashboardUser && !dashboardPassword) throw new Error("DASHBOARD_PASSWORD is required when DASHBOARD_USER is set");
+  if (dashboardPassword && !dashboardUser) throw new Error("DASHBOARD_USER is required when DASHBOARD_PASSWORD is set");
   return {
     port: positiveInt(env, "PORT", 4321),
     host: text(env, "HOST") ?? "127.0.0.1",
@@ -55,5 +73,8 @@ export function loadConfig(env: Env): Config {
     healthAlertAfterMinutes: positiveInt(env, "HEALTH_ALERT_AFTER_MINUTES", 15),
     pauseAlertAfterMinutes: positiveInt(env, "PAUSE_ALERT_AFTER_MINUTES", 30),
     heartbeatUrl: text(env, "HEARTBEAT_URL"),
+    allowedHosts: hostList(env, "ALLOWED_HOSTS"),
+    dashboardUser,
+    dashboardPassword,
   };
 }

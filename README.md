@@ -42,8 +42,75 @@ Anyone who knows it can read your pushes, so don't share it.
 | `npm run service:status` | launchd's view of the job |
 | `npm run service:uninstall` | stop and remove it (your data in `./data` stays) |
 | `npm run dev` | run from source with reload (stop the service first, it uses the same port) |
+| `npm run deploy -- user@host` | ship the last commit to a Linux server and (re)start it with Docker, see below |
 | `npm run smoke` | one live request to Apple, prints the iPhone Duo table; `npm run smoke -- --push` also sends a test push |
 | `npm test` / `npm run typecheck` | tests (no network) / type check |
+
+## Run it on a Linux server (Docker)
+
+Any Linux box with Docker + Compose works; an always-on server avoids the laptop sleep problem entirely.
+
+```sh
+npm run deploy -- root@your-server          # ships the last commit to /opt/abholbereit and starts it
+```
+
+`scripts/deploy.sh` copies the committed code over SSH (no GitHub access needed on the server), creates
+`/opt/abholbereit/.env` on first run, and runs `docker compose up -d --build`. Your alerts live in
+`/opt/abholbereit/data` and survive redeploys. Run the same command again to update.
+
+The container only listens on the server's `127.0.0.1:4321`. To open the dashboard from your Mac:
+
+```sh
+ssh -N -L 4321:127.0.0.1:4321 root@your-server   # keep this running, then open http://localhost:4321
+```
+
+On the server:
+
+| | |
+|---|---|
+| logs | `cd /opt/abholbereit && docker compose logs -f --tail 50` |
+| restart / apply `.env` changes | `docker compose up -d` |
+| stop | `docker compose down` (data stays) |
+| status | `docker compose ps` · `curl -s localhost:4321/api/status` |
+
+### On a subdomain with basic auth
+
+1. In `/opt/abholbereit/.env`, set
+   ```
+   ALLOWED_HOSTS=stock.example.com
+   DASHBOARD_USER=you
+   DASHBOARD_PASSWORD=a-long-random-password
+   ```
+   then `docker compose up -d`. Every page now asks for the password; only `/healthz` stays open.
+2. Point the subdomain's DNS at the server and add an nginx site, e.g.
+   `/etc/nginx/sites-available/stock.example.com` (link it into `sites-enabled`):
+   ```nginx
+   server {
+       listen 80;
+       server_name stock.example.com;
+       location / {
+           proxy_pass http://127.0.0.1:4321;
+           proxy_set_header Host $host;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+3. `nginx -t && systemctl reload nginx`, then `certbot --nginx -d stock.example.com` for HTTPS.
+   Basic auth sends the password with every request, so only use it over HTTPS.
+
+### Moving from the Mac to the server
+
+Your alerts and ntfy topic live in `data/stockchecker.db`. To move them (so your phone subscription keeps working):
+
+```sh
+npm run service:uninstall                                    # stop the Mac checker (closes the DB cleanly)
+ssh root@your-server 'cd /opt/abholbereit && docker compose stop && rm -f data/stockchecker.db*'
+scp data/stockchecker.db root@your-server:/opt/abholbereit/data/
+ssh root@your-server 'cd /opt/abholbereit && chown 1000:1000 data/stockchecker.db && docker compose start'
+```
+
+Run only one checker per topic at a time, or every push arrives twice.
 
 ## Configuration
 
@@ -51,7 +118,7 @@ Copy `.env.example` to `.env` and change what you need, then `npm run service:re
 
 | Variable | Default | |
 |---|---|---|
-| `PORT` / `HOST` | `4321` / `127.0.0.1` | Dashboard address. Keep `127.0.0.1`: there's no login. |
+| `PORT` / `HOST` | `4321` / `127.0.0.1` | Dashboard address. Keep `127.0.0.1` unless you add basic auth. (Docker sets `0.0.0.0` inside the container and publishes only on the host's `127.0.0.1`.) |
 | `DATA_DIR` | `./data` | SQLite database location. |
 | `POLL_INTERVAL_SECONDS` | `30` | Base interval, ±20 % jitter. |
 | `MAX_REQUESTS_PER_HOUR` | `150` | Hard budget for Apple requests; the interval stretches to respect it. |
@@ -63,6 +130,8 @@ Copy `.env.example` to `.env` and change what you need, then `npm run service:re
 | `HEALTH_ALERT_AFTER_MINUTES` | `15` | Push a warning after failing this long. |
 | `PAUSE_ALERT_AFTER_MINUTES` | `30` | Push "resumed" after a pause at least this long. |
 | `HEARTBEAT_URL` | — | Optional dead-man's switch, see below. |
+| `ALLOWED_HOSTS` | — | Extra host names the dashboard answers to, e.g. your subdomain. Loopback names always work. |
+| `DASHBOARD_USER` / `DASHBOARD_PASSWORD` | — | Turn on basic auth for every page (set both). |
 
 ## Sleep and battery
 

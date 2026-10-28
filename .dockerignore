@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+.env
+.git
+.superpowers
+.playwright-mcp
+coverage
+docs
+test
+*.log

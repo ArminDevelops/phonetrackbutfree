@@ -1,0 +1,23 @@
+services:
+  abholbereit:
+    build: .
+    image: abholbereit:latest
+    container_name: abholbereit
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4321
+      DATA_DIR: /app/data
+    # Only reachable from the server itself: use an SSH tunnel or put nginx in front.
+    ports:
+      - "127.0.0.1:4321:4321"
+    volumes:
+      - ./data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
