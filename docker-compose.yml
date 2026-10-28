@@ -4,6 +4,8 @@ services:
     image: abholbereit:latest
     container_name: abholbereit
     restart: unless-stopped
+    # A uid no host account uses, so other users on the server can't read your topic or alerts.
+    user: "10001:10001"
     env_file:
       - path: .env
         required: false

@@ -107,7 +107,7 @@ Your alerts and ntfy topic live in `data/stockchecker.db`. To move them (so your
 npm run service:uninstall                                    # stop the Mac checker (closes the DB cleanly)
 ssh root@your-server 'cd /opt/abholbereit && docker compose stop && rm -f data/stockchecker.db*'
 scp data/stockchecker.db root@your-server:/opt/abholbereit/data/
-ssh root@your-server 'cd /opt/abholbereit && chown 1000:1000 data/stockchecker.db && docker compose start'
+ssh root@your-server 'cd /opt/abholbereit && chown 10001:10001 data/stockchecker.db && docker compose start'
 ```
 
 Run only one checker per topic at a time, or every push arrives twice.

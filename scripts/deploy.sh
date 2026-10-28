@@ -19,7 +19,8 @@ ssh "$TARGET" "DIR='$DIR' bash -s" <<'REMOTE'
 set -euo pipefail
 cd "$DIR"
 mkdir -p data
-chown 1000:1000 data   # the container runs as the unprivileged "node" user (uid 1000)
+chown -R 10001:10001 data   # the container runs as uid 10001 (see docker-compose.yml), which no host user has
+chmod 700 data
 if [ ! -f .env ]; then
   cat > .env <<'ENV'
 # Server settings for Abholbereit (all options: .env.example). Apply with: docker compose up -d
