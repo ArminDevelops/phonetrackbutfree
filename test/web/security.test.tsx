@@ -77,3 +77,32 @@ describe("basic auth", () => {
     expect(await res.text()).toBe("ok");
   });
 });
+
+describe("client certificate token from nginx", () => {
+  const TOKEN = "t".repeat(40);
+  const env = { DASHBOARD_USER: "admin", DASHBOARD_PASSWORD: "s3cret", CLIENT_CERT_TOKEN: TOKEN };
+
+  test("a request nginx vouched for skips the password", async () => {
+    const t = makeTestApp(env);
+    expect((await t.app.request("/settings", { headers: { "x-client-cert-token": TOKEN } })).status).toBe(200);
+  });
+
+  test("a wrong or missing token still needs the password", async () => {
+    const t = makeTestApp(env);
+    expect((await t.app.request("/settings", { headers: { "x-client-cert-token": "t".repeat(39) + "x" } })).status).toBe(401);
+    expect((await t.app.request("/settings")).status).toBe(401);
+  });
+
+  test("the header means nothing unless a token is configured", async () => {
+    const t = makeTestApp({ DASHBOARD_USER: "admin", DASHBOARD_PASSWORD: "s3cret" });
+    expect((await t.app.request("/settings", { headers: { "x-client-cert-token": "" } })).status).toBe(401);
+    expect((await t.app.request("/settings", { headers: { "x-client-cert-token": TOKEN } })).status).toBe(401);
+  });
+
+  test("cross-site and host checks still apply to certificate requests", async () => {
+    const t = makeTestApp(env);
+    const headers = { "x-client-cert-token": TOKEN, origin: "https://evil.example" };
+    expect((await t.app.request("/alerts/1/delete", { method: "POST", headers })).status).toBe(403);
+    expect((await t.app.request("http://evil.example/settings", { headers: { "x-client-cert-token": TOKEN } })).status).toBe(403);
+  });
+});

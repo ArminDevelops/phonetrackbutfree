@@ -19,7 +19,13 @@ test("defaults", () => {
     allowedHosts: ["127.0.0.1", "localhost", "::1"],
     dashboardUser: null,
     dashboardPassword: null,
+    clientCertToken: null,
   });
+});
+
+test("client certificate token must be long", () => {
+  expect(loadConfig({ CLIENT_CERT_TOKEN: "a".repeat(32) }).clientCertToken).toBe("a".repeat(32));
+  expect(() => loadConfig({ CLIENT_CERT_TOKEN: "short" })).toThrow("CLIENT_CERT_TOKEN");
 });
 
 test("extra allowed hosts extend the loopback names", () => {

@@ -17,6 +17,12 @@ export interface Config {
   /** Optional basic auth for the dashboard, e.g. when it is exposed through a subdomain. */
   dashboardUser: string | null;
   dashboardPassword: string | null;
+  /**
+   * Secret nginx adds (as X-Client-Cert-Token) for devices with a verified client
+   * certificate; such requests skip basic auth. Only set this behind a proxy that
+   * strips the header from everything else.
+   */
+  clientCertToken: string | null;
 }
 
 type Env = Record<string, string | undefined>;
@@ -59,6 +65,8 @@ export function loadConfig(env: Env): Config {
   const dashboardPassword = text(env, "DASHBOARD_PASSWORD");
   if (dashboardUser && !dashboardPassword) throw new Error("DASHBOARD_PASSWORD is required when DASHBOARD_USER is set");
   if (dashboardPassword && !dashboardUser) throw new Error("DASHBOARD_USER is required when DASHBOARD_PASSWORD is set");
+  const clientCertToken = text(env, "CLIENT_CERT_TOKEN");
+  if (clientCertToken && clientCertToken.length < 32) throw new Error("CLIENT_CERT_TOKEN must be at least 32 characters");
   return {
     port: positiveInt(env, "PORT", 4321),
     host: text(env, "HOST") ?? "127.0.0.1",
@@ -76,5 +84,6 @@ export function loadConfig(env: Env): Config {
     allowedHosts: hostList(env, "ALLOWED_HOSTS"),
     dashboardUser,
     dashboardPassword,
+    clientCertToken,
   };
 }

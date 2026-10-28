@@ -99,6 +99,20 @@ On the server:
 3. `nginx -t && systemctl reload nginx`, then `certbot --nginx -d stock.example.com` for HTTPS.
    Basic auth sends the password with every request, so only use it over HTTPS.
 
+### Skip the password on your own devices (client certificate)
+
+nginx can ask devices for a certificate signed by your own private CA and vouch for the ones it trusts,
+so they never see the password prompt. Everyone else still gets basic auth.
+
+- The app trusts a secret header: `CLIENT_CERT_TOKEN=<long random string>` in `.env`. nginx sends
+  `X-Client-Cert-Token` with that value **only** for verified, allow-listed certificates and strips it otherwise.
+- In the nginx site's 443 block: `ssl_client_certificate <ca.crt>; ssl_verify_client optional;` and
+  `proxy_set_header X-Client-Cert-Token $abholbereit_cert_token;`, with the token in a root-only `map`
+  keyed on `"$ssl_client_verify:$ssl_client_serial"` (one line per allowed device; delete a line and reload to revoke).
+- Install the device certificate as a password-protected `.p12`: on iPhone, AirDrop it, then
+  **Settings → Profile Downloaded → Install**. On a Mac, double-click it to add it to Keychain.
+- Works in Safari. Other iOS browsers and home-screen web apps support client certificates less reliably.
+
 ### Moving from the Mac to the server
 
 Your alerts and ntfy topic live in `data/stockchecker.db`. To move them (so your phone subscription keeps working):
@@ -132,6 +146,7 @@ Copy `.env.example` to `.env` and change what you need, then `npm run service:re
 | `HEARTBEAT_URL` | — | Optional dead-man's switch, see below. |
 | `ALLOWED_HOSTS` | — | Extra host names the dashboard answers to, e.g. your subdomain. Loopback names always work. |
 | `DASHBOARD_USER` / `DASHBOARD_PASSWORD` | — | Turn on basic auth for every page (set both). |
+| `CLIENT_CERT_TOKEN` | — | Secret nginx adds for verified client certificates, which then skip basic auth (see above). |
 
 ## Sleep and battery
 
