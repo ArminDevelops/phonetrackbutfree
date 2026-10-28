@@ -5,7 +5,9 @@ import type { WebDeps } from "./deps.js";
 import { HealthPill } from "./layout.js";
 import { registerAlerts } from "./pages/alerts.js";
 import { registerNewAlert } from "./pages/new-alert.js";
+import { registerRestocks } from "./pages/restocks.js";
 import { registerSettings } from "./pages/settings.js";
+import { registerStock } from "./pages/stock.js";
 
 export type { WebDeps } from "./deps.js";
 
@@ -33,6 +35,8 @@ export function createApp(deps: WebDeps): Hono {
 
   registerAlerts(app, deps);
   registerNewAlert(app, deps);
+  registerStock(app, deps);
+  registerRestocks(app, deps);
   registerSettings(app, deps);
   return app;
 }
