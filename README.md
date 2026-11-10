@@ -1,6 +1,6 @@
 # Abholbereit — Apple Store pickup alerts for Switzerland
 
-A private, single-user take on storestockchecker.com for the four Swiss Apple Stores
+A self-hosted, single-user take on storestockchecker.com for the four Swiss Apple Stores
 (Zürich Rennweg, Glattzentrum Wallisellen, Basel Freie Strasse, Genève Rue de Rive).
 It watches Apple's in-store-pickup availability and pushes to your phone via
 [ntfy](https://ntfy.sh) the moment a configuration you want can be picked up at a store you chose.
@@ -16,7 +16,7 @@ It covers reserved **in-store pickup** through apple.com/ch-de only, not walk-in
 
 ## Setup
 
-Requirements: macOS, Node ≥ 22.12 (`node -v`).
+Requirements: macOS, Node ≥ 22.12 (`node -v`). On Linux or any other always-on machine, use [Docker](#run-it-with-docker) instead.
 
 ```sh
 npm install
@@ -42,93 +42,42 @@ Anyone who knows it can read your pushes, so don't share it.
 | `npm run service:status` | launchd's view of the job |
 | `npm run service:uninstall` | stop and remove it (your data in `./data` stays) |
 | `npm run dev` | run from source with reload (stop the service first, it uses the same port) |
-| `npm run deploy -- user@host` | ship the last commit to a Linux server and (re)start it with Docker, see below |
+| `npm run deploy -- user@host` | ship the last commit to a server over SSH and (re)start it with Docker, see below |
 | `npm run smoke` | one live request to Apple, prints the iPhone Duo table; `npm run smoke -- --push` also sends a test push |
 | `npm test` / `npm run typecheck` | tests (no network) / type check |
 
-## Run it on a Linux server (Docker)
+## Run it with Docker
 
-Any Linux box with Docker + Compose works; an always-on server avoids the laptop sleep problem entirely.
-
-```sh
-npm run deploy -- root@your-server          # ships the last commit to /opt/abholbereit and starts it
-```
-
-`scripts/deploy.sh` copies the committed code over SSH (no GitHub access needed on the server), creates
-`/opt/abholbereit/.env` on first run, and runs `docker compose up -d --build`. Your alerts live in
-`/opt/abholbereit/data` and survive redeploys. Run the same command again to update.
-
-The container only listens on the server's `127.0.0.1:4321`. To open the dashboard from your Mac:
+Any machine with Docker + Compose works; an always-on server avoids the laptop sleep problem entirely.
 
 ```sh
-ssh -N -L 4321:127.0.0.1:4321 root@your-server   # keep this running, then open http://localhost:4321
+cp .env.example .env                              # optional, see Configuration
+mkdir -p data && sudo chown 10001:10001 data      # the container runs as uid 10001
+docker compose up -d --build
 ```
 
-On the server:
+Your alerts live in `./data` and survive rebuilds. The container only listens on the host's `127.0.0.1:4321`,
+so reach it through an SSH tunnel (`ssh -N -L 4321:127.0.0.1:4321 user@host`, then open
+<http://localhost:4321>) or a reverse proxy.
 
-| | |
-|---|---|
-| logs | `cd /opt/abholbereit && docker compose logs -f --tail 50` |
-| restart / apply `.env` changes | `docker compose up -d` |
-| stop | `docker compose down` (data stays) |
-| status | `docker compose ps` · `curl -s localhost:4321/api/status` |
+`npm run deploy -- user@host [dir]` does all of the above on a remote server over SSH: it copies the last
+commit (no Git access needed on the server) to `dir` (default `/opt/abholbereit`), creates a `.env` there on
+first run, and runs `docker compose up -d --build`. Run it again to update.
 
-### On a subdomain with basic auth
+### Behind a reverse proxy
 
-1. In `/opt/abholbereit/.env`, set
-   ```
-   ALLOWED_HOSTS=stock.example.com
-   DASHBOARD_USER=you
-   DASHBOARD_PASSWORD=a-long-random-password
-   ```
-   then `docker compose up -d`. Every page now asks for the password; only `/healthz` stays open.
-2. Point the subdomain's DNS at the server and add an nginx site, e.g.
-   `/etc/nginx/sites-available/stock.example.com` (link it into `sites-enabled`):
-   ```nginx
-   server {
-       listen 80;
-       server_name stock.example.com;
-       location / {
-           proxy_pass http://127.0.0.1:4321;
-           proxy_set_header Host $host;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-       }
-   }
-   ```
-3. `nginx -t && systemctl reload nginx`, then `certbot --nginx -d stock.example.com` for HTTPS.
-   Basic auth sends the password with every request, so only use it over HTTPS.
+If you expose the dashboard on a domain, set `ALLOWED_HOSTS` to that host name and turn on basic auth with
+`DASHBOARD_USER` / `DASHBOARD_PASSWORD`; only `/healthz` stays open. Serve it over HTTPS only, because basic
+auth sends the password with every request. Forward the `Host` header to the app.
 
-### Skip the password on your own devices (client certificate)
+Optionally, the proxy can let trusted devices skip the password (e.g. after verifying a client certificate)
+by sending `X-Client-Cert-Token: <CLIENT_CERT_TOKEN>`. Make sure the proxy strips that header from every other request.
 
-nginx can ask devices for a certificate signed by your own private CA and vouch for the ones it trusts,
-so they never see the password prompt. Everyone else still gets basic auth.
-
-- The app trusts a secret header: `CLIENT_CERT_TOKEN=<long random string>` in `.env`. nginx sends
-  `X-Client-Cert-Token` with that value **only** for verified, allow-listed certificates and strips it otherwise.
-- In the nginx site's 443 block: `ssl_client_certificate <ca.crt>; ssl_verify_client optional;` and
-  `proxy_set_header X-Client-Cert-Token $abholbereit_cert_token;`, with the token in a root-only `map`
-  keyed on `"$ssl_client_verify:$ssl_client_serial"` (one line per allowed device; delete a line and reload to revoke).
-- Install the device certificate as a password-protected `.p12`: on iPhone, AirDrop it, then
-  **Settings → Profile Downloaded → Install**. On a Mac, double-click it to add it to Keychain.
-- Works in Safari. Other iOS browsers and home-screen web apps support client certificates less reliably.
-
-### Moving from the Mac to the server
-
-Your alerts and ntfy topic live in `data/stockchecker.db`. To move them (so your phone subscription keeps working):
-
-```sh
-npm run service:uninstall                                    # stop the Mac checker (closes the DB cleanly)
-ssh root@your-server 'cd /opt/abholbereit && docker compose stop && rm -f data/stockchecker.db*'
-scp data/stockchecker.db root@your-server:/opt/abholbereit/data/
-ssh root@your-server 'cd /opt/abholbereit && chown 10001:10001 data/stockchecker.db && docker compose start'
-```
-
-Run only one checker per topic at a time, or every push arrives twice.
+Run only one checker per ntfy topic at a time, or every push arrives twice.
 
 ## Configuration
 
-Copy `.env.example` to `.env` and change what you need, then `npm run service:restart`.
+Copy `.env.example` to `.env` and change what you need, then `npm run service:restart` (Docker: `docker compose up -d`).
 
 | Variable | Default | |
 |---|---|---|
@@ -146,9 +95,9 @@ Copy `.env.example` to `.env` and change what you need, then `npm run service:re
 | `HEARTBEAT_URL` | — | Optional dead-man's switch, see below. |
 | `ALLOWED_HOSTS` | — | Extra host names the dashboard answers to, e.g. your subdomain. Loopback names always work. |
 | `DASHBOARD_USER` / `DASHBOARD_PASSWORD` | — | Turn on basic auth for every page (set both). |
-| `CLIENT_CERT_TOKEN` | — | Secret nginx adds for verified client certificates, which then skip basic auth (see above). |
+| `CLIENT_CERT_TOKEN` | — | Secret header (`X-Client-Cert-Token`) a reverse proxy adds for trusted devices, which then skip basic auth. ≥ 32 characters. |
 
-## Sleep and battery
+## Sleep and battery (macOS)
 
 The checker can only check while the Mac is awake.
 
